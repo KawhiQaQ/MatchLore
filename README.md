@@ -102,14 +102,6 @@ tests/               不依赖私有数据和模型密钥的测试
 scripts/make_demo.py  可复现的合成输入
 ```
 
-## 测试
-
-```sh
-python -m unittest discover -s tests -v
-```
-
-覆盖搜索与穷举对照、时间边界、历史隔离、证据重算、事务／幂等性、API 契约和模型失败回退。合成测试验证程序行为，不代替真实场景的内容质量评价。
-
 ## 许可
 
 代码采用 [MIT License](LICENSE)。此许可不覆盖外部比赛数据或模型服务。

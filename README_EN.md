@@ -102,14 +102,6 @@ tests/               Tests without private data or model credentials
 scripts/make_demo.py  Reproducible synthetic inputs
 ```
 
-## Tests
-
-```sh
-python -m unittest discover -s tests -v
-```
-
-Tests cover search against exhaustive enumeration, time boundaries, historical isolation, evidence recounts, atomic/idempotent ingestion, API contracts, and model failure handling. Synthetic tests validate behavior, not real-world content quality.
-
 ## License
 
 Code is released under the [MIT License](LICENSE). External match data and model services are not covered by that license.

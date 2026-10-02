@@ -110,8 +110,6 @@ python -m unittest discover -s tests -v
 
 Tests cover search against exhaustive enumeration, time boundaries, historical isolation, evidence recounts, atomic/idempotent ingestion, API contracts, and model failure handling. Synthetic tests validate behavior, not real-world content quality.
 
-## Scope and license
-
-This version analyzes time prefixes of **complete post-match records**. It does not ingest live incremental feeds or push updates. It supports a defined pattern family, not arbitrary natural-language queries. Records are relative to the supplied history, not automatically career-wide. Searched historical frequencies are descriptive, not multiple-testing-adjusted significance probabilities.
+## License
 
 Code is released under the [MIT License](LICENSE). External match data and model services are not covered by that license.

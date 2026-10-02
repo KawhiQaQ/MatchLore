@@ -4,7 +4,7 @@
 
 ## 1. Install
 
-Python 3.11 or 3.12, macOS/Linux:
+Current version: **1.0.0**. Python 3.11 or 3.12, macOS/Linux:
 
 ```sh
 git clone https://github.com/KawhiQaQ/MatchLore.git
@@ -81,7 +81,7 @@ matchlore check --mode dota2 --raw ./dota-match.json
 | `warnings` / `coverage` | Missing optional logs, identities or history, and affected statistics |
 | `existing.revision` | Current version to use for explicit replacement |
 
-Fix blocking errors and check again. Missing optional logs disable dependent statistics; they are not counted as zero. EPL coverage relies on the complete StatsBomb feed contract; absent event types alone cannot establish zero occurrences. CLI exit code is 2 when `can_ingest=false`; the API returns HTTP 200 with the report. Import validates again; preflight does not lock the data.
+Fix blocking errors and check again. Missing optional logs disable dependent statistics; they are not counted as zero. EPL coverage relies on the complete StatsBomb feed contract; absent event types alone cannot establish zero occurrences. CLI exit code is 2 when `can_ingest=false`; the API returns HTTP 200 with the report. Raw-file analysis, ingestion and replacement share the same source validation; preflight does not lock the data.
 
 ### Analyze a new complete match
 
@@ -159,6 +159,8 @@ curl -X POST http://127.0.0.1:8765/v1/analyze \
 API `raw` contains JSON data, not a filesystem path. Request bodies are limited to 16 MiB; split large imports into independent transactions. Errors include `error.code`, `error.message`, and `request_id`.
 
 If `MATCHLORE_API_KEY` is set, every endpoint requires `Authorization: Bearer <token>`. Non-loopback binding requires a token. Mining/writes are serialized; this is a local integration server, not a public multi-tenant service.
+
+Replay intervals are **5–30 minutes**. Every replay uses one captured corpus; corrections or withdrawals in another terminal affect subsequent requests only.
 
 ## 6. Maintain history
 

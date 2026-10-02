@@ -4,7 +4,7 @@
 
 ## 1. 安装
 
-需要 Python 3.11 或 3.12。macOS／Linux：
+当前版本 **1.0.0**，需要 Python 3.11 或 3.12。macOS／Linux：
 
 ```sh
 git clone https://github.com/KawhiQaQ/MatchLore.git
@@ -83,7 +83,7 @@ matchlore check --mode dota2 --raw ./dota-match.json
 | `warnings` / `coverage` | 缺少哪些可选日志、身份或历史，以及受影响的统计 |
 | `existing.revision` | 已有比赛的版本号，更正时使用 |
 
-修复 `errors` 后重新检查。缺少可选日志不会被当成零次事件；对应统计会停用。英超按 StatsBomb 完整事件流契约判定覆盖，不能仅凭缺少某种事件证明该事件发生了零次。`can_ingest=false` 时 CLI 退出码为 2；API 返回 HTTP 200 和检查报告。正式导入仍会重新校验，预检不会锁定数据。
+修复 `errors` 后重新检查。缺少可选日志不会被当成零次事件；对应统计会停用。英超按 StatsBomb 完整事件流契约判定覆盖，不能仅凭缺少某种事件证明该事件发生了零次。`can_ingest=false` 时 CLI 退出码为 2；API 返回 HTTP 200 和检查报告。原始文件分析、正式导入和更正共用同一套源数据校验，预检不会锁定数据。
 
 ### 分析新比赛
 
@@ -163,6 +163,8 @@ curl -X POST http://127.0.0.1:8765/v1/analyze \
 API 的 `raw` 是 JSON 内容，不是文件路径。请求上限 16 MiB，大批数据需拆分；每批独立事务。错误返回 `error.code`、`error.message`、`request_id`。
 
 设置 `MATCHLORE_API_KEY` 后，所有接口需 `Authorization: Bearer <token>`；非本地绑定必须设置。当前服务串行执行挖掘／写入，面向本地集成，不作为公网多租户服务直接部署。
+
+回放间隔为 **5～30 分钟**。每次回放固定一份数据快照；其他终端在回放期间进行更正或撤回，只影响后续请求。
 
 ## 6. 历史库维护
 

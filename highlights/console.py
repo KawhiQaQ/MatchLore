@@ -142,7 +142,7 @@ class Console:
         self.show(self.call('analyze','--mode',self.mode,*source,'--phase',phase,'--minute',minute,'--llm',self.provider))
 
     def replay(self,match_id=None):
-        mid=match_id or self.choose_match('all');step=self.number('回放间隔（分钟）',10,1,60)
+        mid=match_id or self.choose_match('all');step=self.number('回放间隔（分钟）',10,5,30)
         # Replay is offline by default: do not silently fan out paid DS requests.
         print('  正在回放，展示原始统计；回放不自动逐帧调用 DS。')
         self.show(self.call('replay','--mode',self.mode,'--match-id',mid,'--step',step,'--llm','off'))

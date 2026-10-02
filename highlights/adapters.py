@@ -15,6 +15,17 @@ def timestamp_ms(value):
     return round((int(h) * 3600 + int(m) * 60 + float(s)) * 1000)
 
 
+def dota_player_identity(account):
+    """Canonical OpenDota account IDs; anonymous sentinels are not identities."""
+    if account is None:
+        return None
+    if isinstance(account,str) and re.fullmatch(r'[0-9]{1,10}',account):
+        account=int(account)
+    if type(account) is not int or not 0<=account<=4294967295:
+        raise ValueError('account_id must be an unsigned 32-bit integer or numeric string')
+    return None if account in (0,4294967295) else str(account)
+
+
 def epl(raw, metadata):
     if not isinstance(raw, list) or not metadata:
         raise ValueError('epl requires StatsBomb events plus match metadata')
@@ -94,6 +105,7 @@ def dota2(raw, metadata=None):
     mid = str(raw['match_id'])
     teams = {'0':raw.get('radiant_name') or '天辉', '1':raw.get('dire_name') or '夜魇'}
     events, players = [], {}
+    identities=set()
     for p in raw['players']:
         if not isinstance(p,dict) or not isinstance(p.get('player_slot'),int) or p['player_slot'] not in (0,1,2,3,4,128,129,130,131,132):
             raise ValueError('Invalid or missing player slot')
@@ -102,8 +114,11 @@ def dota2(raw, metadata=None):
             raise ValueError('Missing kill log or duplicate player slot')
         if len(p['kills_log']) != p.get('kills'):
             raise ValueError('Kill log does not reconcile with player kills')
-        account = p.get('account_id')
-        identity = str(account) if account not in (None, 0, 4294967295) else None
+        identity = dota_player_identity(p.get('account_id'))
+        if identity is not None:
+            if identity in identities:
+                raise ValueError('Duplicate player account_id in the same match')
+            identities.add(identity)
         players[slot] = dict(name=p.get('name') or p.get('personaname') or f'英雄{p["hero_id"]}',
                              team_id=str(int(p['player_slot']>=128)), identity=identity, hero_id=p['hero_id'],seen_by={'1':0})
         players[slot]['metric_coverage']={}

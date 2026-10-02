@@ -13,7 +13,7 @@ from . import __version__
 from .adapters import ADAPTERS
 from .preflight import check_data,check_batch,normalize_source
 from .engine import Miner
-from .store import Store
+from .store import Store,SnapshotStore
 from .llm import enhance, status as llm_status
 
 
@@ -30,7 +30,7 @@ def dispatch(miner, body):
     llm=body.get('llm','off');limit=body.get('max_cards',5)
     if llm not in ('off','deepseek'):raise ValueError('llm must be off or deepseek')
     if type(limit) is not int or not 1<=limit<=10:raise ValueError('max_cards must be integer in 1..10')
-    current=ADAPTERS[mode](raw,body.get('metadata')) if raw is not None else None
+    current=normalize_source(mode,raw,body.get('metadata')) if raw is not None else None
     if type(body.get('include_history',True)) is not bool:raise ValueError('include_history must be boolean')
     result=miner.analyze(mode,body.get('match_id'),body.get('as_of_minute',30),
                          body.get('phase',1),10 if llm=='deepseek' else limit,current=current,include_history=body.get('include_history',True))
@@ -83,11 +83,7 @@ def reanalyze_history(store, body):
         raise AppError('invalid_request','Invalid phase, as_of_minute or max_cards')
     targets,corpus=store.affected_by(body['mode'],body['revision'])
     # Analyze a single captured corpus, even if another process changes the live ledger.
-    class Snapshot:
-        def corpus(self,mode):return corpus
-        def match(self,mode,mid):return next(m for m in corpus if m['match_id']==mid)
-        def history(self,current):return Store.history(self,current)
-    miner=Miner(Snapshot());results=[];skipped=[]
+    miner=Miner(SnapshotStore(corpus,body['mode']));results=[];skipped=[]
     for mid in targets:
         match=miner.store.match(body['mode'],mid)
         if match['phases'].get(str(phase),0)<minute:

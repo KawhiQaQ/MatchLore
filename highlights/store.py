@@ -220,3 +220,27 @@ class Store:
 
     def list_matches(self, mode, role='development'):
         return [{k:m[k] for k in ('match_id','title','date','phases','role')} for m in self.corpus(mode) if role=='all' or m['role']==role]
+
+
+class SnapshotStore:
+    """Read-only corpus captured for an entire replay or reanalysis request."""
+    def __init__(self, matches, mode):
+        if mode not in ('epl', 'dota2'):
+            raise ValueError('mode must be epl or dota2')
+        self.mode = mode
+        self._matches = {m['match_id']: m for m in copy.deepcopy(matches) if m['mode'] == mode}
+
+    def corpus(self, mode):
+        if mode != self.mode:
+            raise ValueError('Mode differs from the captured snapshot')
+        return list(self._matches.values())
+
+    def match(self, mode, match_id):
+        self.corpus(mode)
+        try:
+            return self._matches[str(match_id)]
+        except KeyError:
+            raise AppError('match_not_found', 'Match not found in this snapshot', 404) from None
+
+    def history(self, current):
+        return Store.history(self, current)

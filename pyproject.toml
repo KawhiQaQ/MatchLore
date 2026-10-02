@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "matchlore"
-version = "0.9.0"
+version = "1.0.0"
 description = "Evidence-backed statistical highlights from sports and esports match data"
 readme = "README_EN.md"
 requires-python = ">=3.11,<3.13"

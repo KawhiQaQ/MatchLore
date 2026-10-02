@@ -1,6 +1,6 @@
 """Shared mining, evidence, ranking and rendering; adapters own domain semantics."""
 from . import __version__
-from .store import Store
+from .store import Store,SnapshotStore
 from collections import defaultdict
 from fractions import Fraction
 import hashlib
@@ -272,10 +272,13 @@ class Miner:
         if type(step) is not int or not 5<=step<=30:raise ValueError('step must be integer in 5..30')
         if type(max_cards) is not int or not 1<=max_cards<=10:raise ValueError('max_cards must be integer in 1..10')
         if llm not in ('off','deepseek'):raise ValueError('llm must be off or deepseek')
-        m=self.store.match(mode,match_id);snapshots=[];seen=[];seen_cards=set()
+        # Capture one corpus before any frame. External corrections/withdrawals
+        # affect the next request, never the middle of this replay.
+        miner=Miner(SnapshotStore(self.store.corpus(mode),mode))
+        m=miner.store.match(mode,match_id);snapshots=[];seen=[];seen_cards=set()
         for phase,length in sorted(m['phases'].items()):
             for minute in range(step,length+1,step):
-                r=self.analyze(mode,match_id,minute,int(phase),10)
+                r=miner.analyze(mode,match_id,minute,int(phase),10)
                 fresh=[]
                 for c in r['cards']:
                     if c['id'] in seen_cards:continue

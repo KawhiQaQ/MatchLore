@@ -2,7 +2,7 @@
 import math
 import re
 from collections import Counter
-from .adapters import ADAPTERS
+from .adapters import ADAPTERS,dota_player_identity
 from .errors import AppError
 
 
@@ -60,7 +60,7 @@ def source_errors(mode, raw, metadata=None):
         players=raw.get('players')
         if not isinstance(players,list) or len(players)!=10:
             issue('raw.players','Expected exactly 10 players'); return errors
-        slots=set()
+        slots=set();identities=set()
         for i,p in enumerate(players):
             path=f'raw.players[{i}]'
             if not required(p,['player_slot','hero_id','kills','kills_log'],path):continue
@@ -68,6 +68,14 @@ def source_errors(mode, raw, metadata=None):
             if type(slot) is not int or slot not in (0,1,2,3,4,128,129,130,131,132):issue(path+'.player_slot','Invalid player slot')
             elif slot in slots:issue(path+'.player_slot','Duplicate player slot')
             else:slots.add(slot)
+            try:
+                identity=dota_player_identity(p.get('account_id'))
+            except ValueError as exc:
+                issue(path+'.account_id',str(exc))
+            else:
+                if identity is not None:
+                    if identity in identities:issue(path+'.account_id','Duplicate player account_id in the same match')
+                    identities.add(identity)
             number(p.get('kills'),path+'.kills',True,0)
             logs=p.get('kills_log')
             if not isinstance(logs,list):issue(path+'.kills_log','Required parsed kill log must be an array');continue

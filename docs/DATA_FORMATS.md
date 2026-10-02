@@ -61,12 +61,14 @@ Provide a parsed OpenDota match object as `raw`; no separate metadata object is 
 
 | Statistic | Additional fields |
 |---|---|
-| Cross-match player history | `players[].account_id` |
+| Cross-match player history | Unique non-anonymous `players[].account_id` within each match |
 | Cross-match team history | `radiant_team_id`, `dire_team_id` |
 | Death-dependent sequences | `deaths_log` reconciled with `deaths` |
 | Buybacks | `buyback_log` reconciled with `buyback_count` |
 | Observer wards placed | `obs_log` reconciled with `obs_placed` |
 | Towers lost | Valid building events in `objectives` |
+
+Account IDs accept unsigned 32-bit integers or numeric strings and are canonicalized before checking uniqueness. `null`, `0`, and `4294967295` mean anonymous; multiple anonymous players are allowed. Duplicate known accounts are rejected.
 
 Player log fields belong to `players[]`; all log times are seconds. Missing/unverified coverage disables dependent statistics. Kills refer to player-attributed logs, not necessarily every scoreboard kill; wards placed do not imply effective vision. Analysis uses minutes 5 through `min(floor(duration/60), 60)`.
 
@@ -79,6 +81,6 @@ This repository redistributes neither provider's real match data. The local demo
 
 ## Preflight and corrections / 预检与更正
 
-Run `matchlore check --mode <mode> --raw <file>` (plus EPL `--metadata`) before ingestion, or use `--manifest` for a batch. The JSON report distinguishes invalid sources (`valid=false`), storage conflicts (`can_ingest=false`), and optional coverage warnings. Ingestion repeats the checks.
+Run `matchlore check --mode <mode> --raw <file>` (plus EPL `--metadata`) before ingestion, or use `--manifest` for a batch. The JSON report distinguishes invalid sources (`valid=false`), storage conflicts (`can_ingest=false`), and optional coverage warnings. Raw-file analysis, ingestion, and replacement share these source checks; analysis does not bypass them.
 
 Corrections retain `(mode, match_id)` and supply the complete replacement source. Read `history-status` first and submit its `revision` as `--expected-revision`, with a reason. Withdrawals are logical and auditable; explicit replacement can restore them. See the deployment guides for commands and affected-match reanalysis.

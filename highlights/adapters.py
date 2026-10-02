@@ -121,7 +121,7 @@ def dota2(raw, metadata=None):
         deaths=p.get('deaths_log')
         valid_deaths=(isinstance(deaths,list) and len(deaths)==p.get('deaths')
                       and all(isinstance(e,dict) and type(e.get('time')) in (int,float)
-                              and e['time']<=raw['duration'] for e in deaths))
+                              and math.isfinite(e['time']) and e['time']<=raw['duration'] for e in deaths))
         players[slot]['death_log_complete']=valid_deaths
         if valid_deaths:
             for i,r in enumerate(deaths):
@@ -129,7 +129,7 @@ def dota2(raw, metadata=None):
                                    team_id=players[slot]['team_id'],player_id=slot,kind='Death',
                                    source=dict(player_slot=int(slot),log='deaths_log',index=i)))
         for i, r in enumerate(p['kills_log']):
-            if not isinstance(r.get('time'), (int, float)):
+            if type(r.get('time')) not in (int, float) or not math.isfinite(r['time']):
                 raise ValueError('Invalid kill timestamp')
             if r['time'] > raw['duration']:
                 raise ValueError('Kill occurs after match end')
@@ -140,6 +140,7 @@ def dota2(raw, metadata=None):
     tower_rows=[];tower_valid=isinstance(objectives,list)
     if tower_valid:
         for i,r in enumerate(objectives):
+            if not isinstance(r,dict):tower_valid=False;break
             if r.get('type')!='building_kill' or '_tower' not in str(r.get('key','')):continue
             key=r['key']
             if (not re.fullmatch(r'npc_dota_(goodguys|badguys)_(?:tower[1-3]_(?:top|mid|bot)|tower4)',key)

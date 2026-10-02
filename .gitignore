@@ -34,3 +34,4 @@ results/
 result*.json
 result*.txt
 openapi.json
+outputs/

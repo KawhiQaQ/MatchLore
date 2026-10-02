@@ -20,7 +20,8 @@ MatchLore searches match events and historical records for bursts, phase changes
 - **Historical context**: time and season/patch filters exclude future and overlapping matches.
 - **Auditable results**: original statistics retain their evidence; independent recount checks are included.
 - **Optional DeepSeek**: commentary drafts are separate from the original statistics.
-- **Persistent history**: SQLite storage, idempotent submissions, and atomic batch imports.
+- **Data preflight**: checks fields, timestamps, event consistency and log coverage, with actionable diagnostics.
+- **History maintenance**: idempotent ingestion, atomic batches, correction/withdrawal/restoration, revision logs and affected-match reanalysis.
 
 ```text
 Match data → Adapter → Historical references → Pattern search → Selection

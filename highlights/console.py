@@ -14,6 +14,11 @@ COMMANDS={
     '/mode':'切换英超 / Dota 2',
     '/llm':'开关 DeepSeek 转播参考稿',
     '/save':'保存最近结果为 JSON / 文本',
+    '/check':'检查原始比赛或历史清单，不写入数据库',
+    '/history':'查看单场版本与维护记录',
+    '/replace':'更正或恢复比赛，保留版本记录',
+    '/withdraw':'撤回比赛，停止参与分析与历史参考',
+    '/reanalyze':'按变更版本重新分析受影响比赛',
     '/import':'批量导入历史 manifest',
     '/ingest':'将完整比赛纳入历史',
     '/data':'切换数据目录',
@@ -152,6 +157,28 @@ class Console:
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text,encoding='utf-8')
         print(f'  已保存：{path.resolve()}')
 
+    def check(self):
+        choice=self.number('1 单场原始文件 / 2 历史 manifest',1,1,2)
+        args=['--mode',self.mode]
+        if choice==2:args+=['--manifest',self.path('历史 manifest 路径')]
+        else:
+            args+=['--raw',self.path('原始比赛 JSON 路径')]
+            if self.mode=='epl':args+=['--metadata',self.path('英超单场元数据 JSON 路径')]
+        print(json.dumps(self.call('check',*args),ensure_ascii=False,indent=2))
+
+    def maintain(self,command):
+        mid=self.ask('比赛 ID（保持原 ID）')
+        state=self.call('history-status','--mode',self.mode,'--match-id',mid)
+        print(json.dumps(state,ensure_ascii=False,indent=2))
+        if command=='history-status':return
+        args=['--mode',self.mode,'--match-id',mid,'--expected-revision',state['revision']]
+        if command=='replace':
+            args+=['--raw',self.path('修正后的完整比赛 JSON 路径')]
+            if self.mode=='epl':args+=['--metadata',self.path('英超单场元数据 JSON 路径')]
+        args+=['--reason',self.ask('操作原因')]
+        if self.ask('确认提交本次变更？y/N','n').lower()!='y':return
+        print(json.dumps(self.call(command,*args),ensure_ascii=False,indent=2))
+
     def handle(self,line):
         parts=shlex.split(line);cmd=parts[0];rest=parts[1:]
         if cmd in ('/exit','/quit','exit','quit'):return False
@@ -184,6 +211,14 @@ class Console:
             path=self.path('新数据目录（须不存在）');demo=self.ask('演示数据 zip 路径，留空建立空库')
             from .datasets import initialize
             initialize(path,Path(demo).expanduser() if demo else None);self.data=path;self.status()
+        elif cmd=='/check':self.check()
+        elif cmd=='/reanalyze':
+            revision=self.number('变更 revision',1,1,2147483647)
+            phase=self.number('半场：1 上半场 / 2 下半场',1,1,2) if self.mode=='epl' else 1
+            minute=self.number('分析至第几分钟',30,5,45 if self.mode=='epl' else 60)
+            self.last_result=self.call('reanalyze','--mode',self.mode,'--revision',revision,'--phase',phase,'--minute',minute)
+            print(f'  完成 {len(self.last_result["results"])} 场，跳过 {len(self.last_result["skipped"])} 场；使用 /save 保存。')
+        elif cmd in ('/history','/replace','/withdraw'):self.maintain('history-status' if cmd=='/history' else cmd[1:])
         elif cmd=='/import':
             path=self.path('历史 manifest 路径')
             print(f'  将导入 {self.mode_name} 历史：{path} → {self.data}')

@@ -66,5 +66,23 @@ class ConsoleTest(unittest.TestCase):
             console.handle('/replay 123')
         self.assertEqual(call.call_args.args[-2:],('--llm','off'))
 
+    def test_cancel_maintenance_only_reads_status(self):
+        console=Console('/unused');console.mode='dota2'
+        with patch('builtins.input',side_effect=['123','Bad source','n']),patch.object(console,'call',return_value={'revision':7}) as call,contextlib.redirect_stdout(io.StringIO()):
+            console.handle('/withdraw')
+        call.assert_called_once_with('history-status','--mode','dota2','--match-id','123')
+
+    def test_maintenance_passes_displayed_revision(self):
+        console=Console('/unused');console.mode='dota2'
+        with patch('builtins.input',side_effect=['123','Bad source','y']),patch.object(console,'call',side_effect=[{'revision':7},{'status':'withdrawn'}]) as call,contextlib.redirect_stdout(io.StringIO()):
+            console.handle('/withdraw')
+        self.assertEqual(call.call_args.args,('withdraw','--mode','dota2','--match-id','123','--expected-revision',7,'--reason','Bad source'))
+
+    def test_check_does_not_call_ingest(self):
+        console=Console('/unused');console.mode='dota2'
+        with patch('builtins.input',side_effect=['1','/tmp/input.json']),patch.object(console,'call',return_value={'valid':False}) as call,contextlib.redirect_stdout(io.StringIO()):
+            console.handle('/check')
+        call.assert_called_once_with('check','--mode','dota2','--raw',Path('/tmp/input.json'))
+
 
 if __name__=='__main__':unittest.main()

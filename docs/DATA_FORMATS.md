@@ -48,7 +48,7 @@ Provide a parsed OpenDota match object as `raw`; no separate metadata object is 
 
 | Field | Requirement |
 |---|---|
-| `match_id`, `start_time`, `duration` | Stable ID, Unix start time, duration in seconds |
+| `match_id`, `start_time`, `duration` | Stable ID, nonnegative Unix start time, integer duration of at least 300 seconds for ingestion |
 | `patch`, `game_mode` | Historical partition |
 | `radiant_win` | Boolean required for ingestion |
 | `players` | Exactly ten players |
@@ -76,3 +76,9 @@ Player log fields belong to `players[]`; all log times are seconds. Missing/unve
 - **OpenDota**: [API documentation](https://docs.opendota.com/), complete parsed records from `GET /api/matches/{match_id}`. Log availability varies; a summary-only response is insufficient.
 
 This repository redistributes neither provider's real match data. The local demo generator produces original synthetic fixtures solely for testing the integration.
+
+## Preflight and corrections / 预检与更正
+
+Run `matchlore check --mode <mode> --raw <file>` (plus EPL `--metadata`) before ingestion, or use `--manifest` for a batch. The JSON report distinguishes invalid sources (`valid=false`), storage conflicts (`can_ingest=false`), and optional coverage warnings. Ingestion repeats the checks.
+
+Corrections retain `(mode, match_id)` and supply the complete replacement source. Read `history-status` first and submit its `revision` as `--expected-revision`, with a reason. Withdrawals are logical and auditable; explicit replacement can restore them. See the deployment guides for commands and affected-match reanalysis.

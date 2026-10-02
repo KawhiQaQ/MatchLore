@@ -6,7 +6,8 @@ import sys
 import zipfile
 from . import __version__
 from .store import Store,DEFAULT_DATA,read_json
-from .api import dispatch,serve,ingest,import_history
+from .api import dispatch,serve,ingest,import_history,history_operation,reanalyze_history
+from .preflight import check_data,check_batch
 from .engine import Miner
 from . import llm
 from .contracts import openapi
@@ -29,14 +30,26 @@ def parser():
     p=Parser(prog='matchlore',description='Mine evidence-backed EPL/Dota highlights; original facts plus optional broadcast references')
     p.add_argument('--version',action='version',version=__version__);common(p,True)
     commands=p.add_subparsers(dest='command')
-    for name in ('console','init','demo-export','doctor','schema','llm-status','list','analyze','replay','ingest','import-history','serve'):
+    for name in ('console','init','demo-export','doctor','schema','llm-status','list','analyze','replay','ingest','import-history','serve','check','history-status','replace','withdraw','reanalyze'):
         q=commands.add_parser(name);common(q)
         if name=='init':q.add_argument('--demo',type=Path,help='Portable demo-data.zip; destination must not exist')
-        if name in ('list','analyze','replay','ingest','import-history'):q.add_argument('--mode',choices=['epl','dota2'],required=True)
+        if name in ('list','analyze','replay','ingest','import-history','check','history-status','replace','withdraw','reanalyze'):q.add_argument('--mode',choices=['epl','dota2'],required=True)
         if name=='list':q.add_argument('--role',choices=['development','historical','committed','all'],default='development')
         if name in ('analyze','ingest'):
             source=q.add_mutually_exclusive_group(required=True);source.add_argument('--match-id');source.add_argument('--raw',type=Path)
             q.add_argument('--metadata',type=Path,help='EPL single match metadata JSON for --raw')
+        if name=='check':
+            source=q.add_mutually_exclusive_group(required=True)
+            source.add_argument('--raw',type=Path);source.add_argument('--manifest',type=Path)
+            q.add_argument('--metadata',type=Path)
+        if name=='replace':
+            q.add_argument('--raw',type=Path,required=True);q.add_argument('--metadata',type=Path)
+        if name in ('history-status','replace','withdraw'):q.add_argument('--match-id',required=True)
+        if name in ('replace','withdraw'):
+            q.add_argument('--expected-revision',type=int,required=True);q.add_argument('--reason',required=True)
+        if name=='reanalyze':
+            q.add_argument('--revision',type=int,required=True);q.add_argument('--minute',type=int,default=30)
+            q.add_argument('--phase',type=int,default=1);q.add_argument('--max-cards',type=int,default=5)
         if name=='analyze':
             q.add_argument('--minute',type=int,default=30);q.add_argument('--phase',type=int,default=1);q.add_argument('--no-history',action='store_true')
         if name in ('analyze','replay'):
@@ -80,9 +93,11 @@ def execute(args):
         from ._solver import witness
         return dict(version=__version__,data=str(store.root.resolve()),data_exists=store.root.exists(),
                     solver='witness_successor_search',modes={mode:dict(total=len(store.corpus(mode)),historical=len([m for m in store.corpus(mode) if m['role'] in ('historical','committed')])) for mode in ('epl','dota2')},llm=llm.status())
+    if args.command=='reanalyze':return reanalyze_history(store,dict(mode=args.mode,revision=args.revision,as_of_minute=args.minute,phase=args.phase,max_cards=args.max_cards))
     if args.command=='list':return store.list_matches(args.mode,args.role)
     if args.command=='replay':return Miner(store).replay(args.mode,args.match_id,args.step,args.max_cards,llm=args.llm)
-    if args.command=='import-history':
+    if args.command=='import-history' or (args.command=='check' and args.manifest):
+        if args.command=='check' and args.metadata:raise AppError('invalid_arguments','--metadata requires --raw')
         items=read_json(args.manifest)
         if not isinstance(items,list) or not 1<=len(items)<=1000:raise AppError('invalid_manifest','Manifest must be array of 1..1000 entries')
         bodies=[]
@@ -91,7 +106,11 @@ def execute(args):
             body=dict(mode=args.mode,raw=read_json(args.manifest.parent/item['raw']))
             if 'metadata' in item:body['metadata']=read_json(args.manifest.parent/item['metadata'])
             bodies.append(body)
-        return import_history(store,dict(matches=bodies))
+        return check_batch(store,dict(matches=bodies)) if args.command=='check' else import_history(store,dict(matches=bodies))
+    if args.command in ('history-status','withdraw'):
+        body=dict(mode=args.mode,match_id=args.match_id)
+        if args.command=='withdraw':body.update(expected_revision=args.expected_revision,reason=args.reason)
+        return history_operation(store,body,'status' if args.command=='history-status' else 'withdraw')
     body=dict(mode=args.mode)
     if args.raw:
         body['raw']=read_json(args.raw)
@@ -99,6 +118,10 @@ def execute(args):
     else:
         if args.metadata:raise AppError('invalid_arguments','--metadata requires --raw')
         body['match_id']=args.match_id
+    if args.command=='check':return check_data(store,body)
+    if args.command=='replace':
+        body.update(match_id=args.match_id,expected_revision=args.expected_revision,reason=args.reason)
+        return history_operation(store,body,'replace')
     if args.command=='ingest':return ingest(store,body)
     body.update(as_of_minute=args.minute,phase=args.phase,max_cards=args.max_cards,llm=args.llm,include_history=not args.no_history)
     return dispatch(Miner(store),body)
@@ -121,6 +144,7 @@ def main(argv=None):
             args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(text)
             print(str(args.output.resolve()))
         else:print(text,end='')
+        if args.command=='check' and not result['can_ingest']:raise SystemExit(2)
     except (AppError,ValueError,KeyError,TypeError,OSError,zipfile.BadZipFile) as error:
         print(json.dumps(error_document(error),ensure_ascii=False),file=sys.stderr)
         raise SystemExit(3 if isinstance(error,AppError) and error.status==404 else 4 if isinstance(error,AppError) and error.status==409 else 2)

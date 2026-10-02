@@ -11,6 +11,7 @@ from .errors import AppError,error_document
 from .contracts import openapi
 from . import __version__
 from .adapters import ADAPTERS
+from .preflight import check_data,check_batch,normalize_source
 from .engine import Miner
 from .store import Store
 from .llm import enhance, status as llm_status
@@ -44,7 +45,7 @@ def normalize_ingest(store,body):
     if 'raw' in body and mode=='dota2':
         if not isinstance(body['raw'],dict) or type(body['raw'].get('radiant_win')) is not bool:
             raise ValueError('Ingest requires a completed Dota match with final radiant_win result')
-    m=ADAPTERS[mode](body['raw'],body.get('metadata')) if 'raw' in body else store.match(mode,body['match_id'])
+    m=normalize_source(mode,body['raw'],body.get('metadata')) if 'raw' in body else store.match(mode,body['match_id'])
     return m
 
 
@@ -58,6 +59,42 @@ def import_history(store,body):
     matches=[normalize_ingest(store,item) for item in body['matches']]
     rows=store.ingest_many(matches)
     return dict(status='committed',results=rows,inserted=sum(r['status']=='committed' for r in rows),already_present=sum(r['status']=='already_present' for r in rows))
+
+
+def history_operation(store, body, action):
+    fields={'mode','match_id'} if action=='status' else {'mode','match_id','expected_revision','reason'}
+    if action=='replace':fields |= {'raw','metadata'}
+    required=fields-{'metadata'}
+    if not isinstance(body,dict) or set(body)-fields or required-set(body):
+        raise AppError('invalid_request','Invalid history operation fields')
+    if body['mode'] not in ADAPTERS or not isinstance(body['match_id'],str) or not body['match_id'].strip():
+        raise AppError('invalid_request','Supply a valid mode and nonempty string match_id')
+    if action=='status':return store.history_status(body['mode'],body['match_id'])
+    replacement=normalize_source(body['mode'],body['raw'],body.get('metadata')) if action=='replace' else None
+    return store.change(body['mode'],body['match_id'],body['expected_revision'],body['reason'],replacement)
+
+
+def reanalyze_history(store, body):
+    allowed={'mode','revision','as_of_minute','phase','max_cards'}
+    if not isinstance(body,dict) or set(body)-allowed or not {'mode','revision'}<=set(body):
+        raise AppError('invalid_request','Supply mode, revision and optional phase/as_of_minute/max_cards')
+    minute=body.get('as_of_minute',30);phase=body.get('phase',1);limit=body.get('max_cards',5)
+    if type(minute) is not int or not 5<=minute<=60 or type(phase) is not int or phase not in (1,2) or type(limit) is not int or not 1<=limit<=10:
+        raise AppError('invalid_request','Invalid phase, as_of_minute or max_cards')
+    targets,corpus=store.affected_by(body['mode'],body['revision'])
+    # Analyze a single captured corpus, even if another process changes the live ledger.
+    class Snapshot:
+        def corpus(self,mode):return corpus
+        def match(self,mode,mid):return next(m for m in corpus if m['match_id']==mid)
+        def history(self,current):return Store.history(self,current)
+    miner=Miner(Snapshot());results=[];skipped=[]
+    for mid in targets:
+        match=miner.store.match(body['mode'],mid)
+        if match['phases'].get(str(phase),0)<minute:
+            skipped.append(dict(match_id=mid,reason='phase_or_minute_unavailable'));continue
+        results.append(miner.analyze(body['mode'],mid,minute,phase,limit))
+    return dict(mode=body['mode'],revision=body['revision'],results=results,skipped=skipped,
+                status='completed',llm='off')
 
 
 def make_server(store, host='127.0.0.1', port=8765, api_key=None):
@@ -116,6 +153,14 @@ def make_server(store, host='127.0.0.1', port=8765, api_key=None):
                     with lock:result=dispatch(miner,body)
                 elif self.path=='/v1/ingest':
                     with lock:result=ingest(store,body)
+                elif self.path=='/v1/check':
+                    with lock:result=check_data(store,body)
+                elif self.path in ('/v1/history/status','/v1/history/replace','/v1/history/withdraw'):
+                    with lock:result=history_operation(store,body,self.path.rsplit('/',1)[-1])
+                elif self.path=='/v1/history/reanalyze':
+                    with lock:result=reanalyze_history(store,body)
+                elif self.path=='/v1/history/check':
+                    with lock:result=check_batch(store,body)
                 elif self.path=='/v1/history/import':
                     with lock:result=import_history(store,body)
                 elif self.path=='/v1/replay':

@@ -56,12 +56,32 @@ Prepare complete records in the supported [formats](DATA_FORMATS.md). Create `hi
 For Dota, use only `raw`. Import 1–1000 records of one domain per batch:
 
 ```sh
+matchlore check --mode epl --manifest ./history.json
 matchlore import-history --mode epl --manifest ./history.json
 matchlore doctor
 matchlore list --mode epl --role all
 ```
 
 Identical duplicates return `already_present`. Reusing an ID with different content returns `match_conflict`. Validation errors or conflicts abort the entire batch.
+
+### Check before importing
+
+Check one match, or use `--manifest` above for a batch. Checks do not write to the database:
+
+```sh
+matchlore check --mode epl --raw ./new-events.json --metadata ./new-match.json
+matchlore check --mode dota2 --raw ./dota-match.json
+```
+
+| Output | Meaning |
+|---|---|
+| `valid` | Required fields, timestamps, event IDs and source reconciliation passed |
+| `can_ingest` | Ordinary ingestion is currently possible, including ID conflicts and withdrawals |
+| `errors` | Blocking problems with field paths or reconciliation details |
+| `warnings` / `coverage` | Missing optional logs, identities or history, and affected statistics |
+| `existing.revision` | Current version to use for explicit replacement |
+
+Fix blocking errors and check again. Missing optional logs disable dependent statistics; they are not counted as zero. EPL coverage relies on the complete StatsBomb feed contract; absent event types alone cannot establish zero occurrences. CLI exit code is 2 when `can_ingest=false`; the API returns HTTP 200 with the report. Import validates again; preflight does not lock the data.
 
 ### Analyze a new complete match
 
@@ -126,6 +146,12 @@ curl -X POST http://127.0.0.1:8765/v1/analyze \
 | `GET /openapi.json` | Full request/response contract |
 | `GET /v1/matches?mode=epl&role=all` | List matches |
 | `POST /v1/analyze` | Analyze one snapshot |
+| `POST /v1/check` | Check one source: `mode`, `raw`, optional `metadata` |
+| `POST /v1/history/check` | Check a batch: `{"matches":[check request]}` |
+| `POST /v1/history/status` | Current match revision and change log |
+| `POST /v1/history/replace` | Correct or restore a match |
+| `POST /v1/history/withdraw` | Withdraw a match |
+| `POST /v1/history/reanalyze` | Recompute matches affected by a change |
 | `POST /v1/ingest` | Commit a complete match |
 | `POST /v1/history/import` | Atomic batch: `{"matches":[single-match request]}` |
 | `POST /v1/replay` | Replay time prefixes |
@@ -146,7 +172,50 @@ Include base records, catalogs, SQLite, and sidecar files. Preserve external raw
 
 **Restore:** copy the full backup to a new directory, use the original software version, verify IDs/counts and sample analyses, then restart the service with the restored path. Never overwrite a running database.
 
-**Correct or withdraw a match:** in-place replacement/deletion is not implemented. Back up → correct raw files or the manifest → initialize a new directory → reimport all valid history → verify → switch directories and restart. Do not work around a conflict with a new match ID or directly edit SQLite. If original records are missing, arrange a migration first.
+### Correct, withdraw or restore one match
+
+Read the current revision:
+
+```sh
+matchlore history-status --mode epl --match-id 3754318
+```
+
+Use the returned `revision` as `--expected-revision`. This example assumes `0`:
+
+```sh
+matchlore replace --mode epl --match-id 3754318 \
+  --raw ./corrected-events.json --metadata ./corrected-match.json \
+  --expected-revision 0 --reason 'Provider corrected event timestamps'
+```
+
+Replacement requires a complete source with the same match ID. Withdrawal also checks the revision:
+
+```sh
+matchlore withdraw --mode epl --match-id 3754318 \
+  --expected-revision 0 --reason 'Provider withdrew this record'
+```
+
+These are independent examples. After replacement, use its new revision for withdrawal. On `revision_conflict`, inspect the latest state before retrying. Restore a withdrawn match with `replace` and its latest revision; ordinary `ingest` cannot restore it.
+
+- Changes are transactional and retain reasons, timestamps, and before/after normalized snapshots. Base JSON files are unchanged.
+- Withdrawal removes a match from analysis and historical reference; audit records remain.
+- `affected_matches` lists potentially affected stored IDs using both old/new partitions and time boundaries. Past analyses of uncommitted raw files are not tracked.
+- Subsequent analyses see updated data without restarting. Previously exported results remain unchanged.
+
+### Recompute affected matches
+
+Use the change's returned revision (`1` below) and choose a common analysis time:
+
+```sh
+matchlore reanalyze --mode epl --revision 1 --phase 2 --minute 30 \
+  --max-cards 3 --output ./recomputed.json
+```
+
+Recomputes against one current corpus snapshot. Withdrawn matches are excluded; unavailable phases/minutes appear in `skipped`. `results` contains original statistics, with no DS calls. This does not reproduce past query settings or rewrite old exports; run separately for additional times.
+
+API `/v1/history/status` accepts `{"mode":"epl","match_id":"3754318"}`. Withdrawal adds `expected_revision` and `reason`; replacement also adds `raw` and EPL `metadata`. Reanalysis accepts `{"mode":"epl","revision":1,"phase":2,"as_of_minute":30,"max_cards":3}`.
+
+The console provides `/check`, `/history`, `/replace`, `/withdraw` and `/reanalyze`. The first write upgrades legacy SQLite automatically. Back up first and upgrade every process sharing the directory to 0.9.0 or later before restarting; older versions do not honor withdrawal markers.
 
 ## 7. Verify installation
 

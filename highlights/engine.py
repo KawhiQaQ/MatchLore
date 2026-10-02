@@ -1,5 +1,6 @@
 """Shared mining, evidence, ranking and rendering; adapters own domain semantics."""
 from . import __version__
+from .store import Store
 from collections import defaultdict
 from fractions import Fraction
 import hashlib
@@ -141,14 +142,19 @@ class Miner:
             raise ValueError('minute, phase and max_cards must be integers')
         if not 1<=max_cards<=10:
             raise ValueError('max_cards must be in 1..10')
-        m=current if current is not None else self.store.match(mode,match_id)
+        if hasattr(self.store,'analysis_inputs'):
+            m,history=self.store.analysis_inputs(mode,match_id,current)
+        else:
+            m=current if current is not None else self.store.match(mode,match_id)
+            history=self.store.history(m)
         if m['mode']!=mode or not 5<=as_of_minute<=m['phases'].get(str(phase),0):
             raise ValueError('Invalid phase/minute; epl half-local 5..45, dota2 5..min(duration,60)')
         end=as_of_minute;p=PROFILES[mode];metric=p['metric']
-        started=time.perf_counter();history=self.store.history(m)
+        started=time.perf_counter()
+        history_fingerprints=tuple(Store.fingerprint(x) for x in history)
         obs=observations(history,phase,end)
         cards=[];solver_stats=[]
-        key=(mode,m['partition'],tuple(x['match_id'] for x in history),phase,end)
+        key=(mode,m['partition'],history_fingerprints,phase,end)
         if key not in self._cubes:
             if len(self._cubes)>=32:self._cubes.pop(next(iter(self._cubes)))
             self._cubes[key]=cube(obs,phase,end,metric)
@@ -233,7 +239,7 @@ class Miner:
         history_candidates=0
         if include_history:
             from .history import TimelineIndex,mine_history
-            hk=(mode,m['partition'],tuple((hm['match_id'],hm.get('source',{}).get('raw_sha256',''),hm['end_order']) for hm in history))
+            hk=(mode,m['partition'],history_fingerprints)
             if hk not in self._history_indexes:
                 if len(self._history_indexes)>=4:self._history_indexes.pop(next(iter(self._history_indexes)))
                 self._history_indexes[hk]=TimelineIndex(history)
@@ -257,6 +263,8 @@ class Miner:
                                      elapsed_seconds=time.perf_counter()-started,renderer='deterministic_zh_v1',
                                      empty_reason=None if selected else '无模式通过支持度、数量、历史频率和去重规则'),
                     provenance=dict(current_source=m['source'],engine_version=__version__,
+                                    current_fingerprint=Store.fingerprint(m),
+                                    history_fingerprint=hashlib.sha256(json.dumps(sorted(history_fingerprints)).encode()).hexdigest(),
                                     solver_sha256=hashlib.sha256((Path(__file__).parent/'_solver/witness.py').read_bytes()).hexdigest()))
         return result
 

@@ -6,6 +6,10 @@
 
 MatchLore searches match events and historical records for bursts, phase changes, personal records, and cross-match sequences. It offers a terminal workspace, CLI, and HTTP API. Every result includes structured facts, event evidence, and historical comparisons.
 
+## Demo
+
+[▶ Watch the CLI demo](docs/assets/example.mov)
+
 ## Features
 
 | Domain | Adapter | Metrics |

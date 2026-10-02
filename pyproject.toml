@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "matchlore"
+version = "0.8.0"
+description = "Evidence-backed statistical highlights from sports and esports match data"
+readme = "README_EN.md"
+requires-python = ">=3.11,<3.13"
+license = {file = "LICENSE"}
+authors = [{name = "MatchLore contributors"}]
+dependencies = ["numpy==1.26.4", "numba==0.67.0"]
+
+[project.urls]
+Repository = "https://github.com/KawhiQaQ/MatchLore"
+Issues = "https://github.com/KawhiQaQ/MatchLore/issues"
+
+[project.scripts]
+matchlore = "highlights.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["highlights*"]
